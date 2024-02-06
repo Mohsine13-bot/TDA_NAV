@@ -1,7 +1,12 @@
 import numpy as np
 from tqdm.auto import tqdm
+import re
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
-
+nltk.download('stopwords')
+nltk.download('punkt')
 
 # Not a perfect transition matrix because I do not obtain a sum of 1 in bith lines and columns, but works for what I want to do.
 def generate_transition_matrix(themes, variability=0.2):
@@ -213,13 +218,149 @@ def generate_dataset(behaviours_specify, data):
 
 
 
+def remove_stop_words(sentence):
+
+    """
+        Remove stop words and ponctuation in a sentence and return a filtred list of words
+
+            Input:
+
+                sentence: (str)
+
+            Output:
+
+                A list of filtred words
+    """
+
+    cleaned_text = re.sub(r'[^\w\s]|l\'', '', sentence)
+
+    words = word_tokenize(cleaned_text)
+
+    filtered_words = [word.lower() for word in words if word.lower() not in stopwords.words('french')]
+
+    return filtered_words
+
+
+def get_document_words(document):
+
+    """
+        Get a list of words associated to a document (theme + words in title)
+
+        Input:
+
+            document: (dict) It contains the title and the theme
+
+        Output:
+
+            A filtred list of words
+
+
+    """
+
+    representation = [document[0].lower()]
+
+    representation += remove_stop_words(document[1]["title"])
+
+    return representation
 
 
 
+def get_session_words(session):
+
+    """
+
+        Get a set of words in a specific session
+
+            Input:
+
+                session: List of dictionaries that contains the themes and the titles
+
+
+            Output:
+
+                A set of filtred words
+    
+    """
+
+    result = []
+
+    for document in session:
+
+        result += get_document_words(document)
+
+    return set(result)
+
+
+def get_session_representation(session, model):
+
+    """
+
+        Get a representation of a session based on the words in the title and the visited themes
+
+            Inputs:
+
+                session: List of documments that have titles and themes
+
+                model: The word2vec model to get representation of words
+
+                
+            Output:
+
+                Numpy array of the representations
+    
+    """
+
+    session_words = get_session_words(session)
+
+    return np.array([model[word] for word in session_words if word in model.key_to_index]).T
 
 
 
+def get_svd_session_representation(session_representation):
+
+    """
+        Get the first eigen vector of the matrix session representation
+
+            Input:
+
+                session_representation: 2D Matrix produced by the egt_session_representation method
+
+            Output:
+
+                A 1D numpy array (first eigen vector)
+    """
+
+    return np.linalg.svd(session_representation)[0][0,:]
 
 
+def get_sessions_representation(sessions, model):
+
+    """
+
+        Return the first eigen vector for each session representation matrix
+
+            Input:
+
+                sessions: List of sessions (one session is alist of picked documents)
+
+                model: The word2vec model to get the representation of each word in the set of words in session
+                
+            Output:
+
+                A list of vectors each vector represent a session
+    
+    """
+
+    print("Vectorize sessions...")
+
+    sessions_word2vec = [get_session_representation(session, model) for session in tqdm(sessions)]
+
+    print("Done!\nCompute SVD sessions")
+
+    sessions_reduced = [get_svd_session_representation(session) for session in tqdm(sessions_word2vec)]
+
+    print("Done!")
+
+    return sessions_reduced
 
 
